@@ -25,8 +25,6 @@ class Horton {
     await this.dbClient.initialize();
 
     this.connected = true;
-
-    // create triggers
   }
 
   async disconnect() {

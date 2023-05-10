@@ -1,0 +1,6 @@
+- [] Support concurrent instances 
+  -> Claim ownership of table subscription
+- [] More flexible listeners (e.g. on field change, conditions)
+- [] Improve logging
+- [] Lock then dequeue rows
+- [] Periodic reconciliation
