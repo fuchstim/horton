@@ -5,16 +5,16 @@ async function run() {
     connectionOptions: {
       connectionString: 'postgres://postgres:postgrespw@localhost:32776',
     },
-    listeners: {
+    tableListeners: {
       test_table: true,
     },
   });
 
   await h.connect();
 
-  // h.on('a:INSERT', () => {
-
-  // });
+  h.on('test_table:INSERT', (...args: unknown[]) => {
+    debugger;
+  });
 }
 
 run()

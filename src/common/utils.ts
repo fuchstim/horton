@@ -1,5 +1,4 @@
-import { TOperation } from '../_database';
-import { TRIGGER_OPERATIONS } from './constants';
+import { TOperation, TRIGGER_OPERATIONS } from './types';
 
 export function validatePostgresString(str: string) {
   const match = /^([a-z-_])+$/.exec(str);
@@ -8,5 +7,5 @@ export function validatePostgresString(str: string) {
 }
 
 export function isTriggerOperation(str: string): str is TOperation {
-  return str in TRIGGER_OPERATIONS;
+  return TRIGGER_OPERATIONS.includes(str as unknown as TOperation);
 }

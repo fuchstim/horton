@@ -1,18 +1,16 @@
 import Logger from './common/logger';
 const logger = Logger.ns('DatabaseClient');
 
-import { Pool, PoolClient, PoolConfig } from 'pg';
-import { validatePostgresString } from './common/utils';
-import { EBuiltinDatabaseObjectNames, TRIGGER_OPERATIONS } from './common/constants';
+import { EBuiltinDatabaseObjectNames, TDatabaseConnectionOptions, TOperation, TTableName, TTableTrigger } from './common/types';
 
-export type TConnectionOptions = PoolConfig & { prefix?: string };
-export type TOperation = typeof TRIGGER_OPERATIONS[number];
+import { Pool, PoolClient } from 'pg';
+import { isTriggerOperation, validatePostgresString } from './common/utils';
 
 export default class DatabaseClient {
   private pool: Pool;
   private prefix: string;
 
-  constructor(options: TConnectionOptions) {
+  constructor(options: TDatabaseConnectionOptions) {
     this.pool = new Pool(options);
     this.prefix = options.prefix || 'horton-meta';
 
@@ -41,7 +39,7 @@ export default class DatabaseClient {
     await this.transaction(async client => {
       const existingTriggers = await this.findListenerTriggers(client);
 
-      for (const tableName of Object.keys(existingTriggers)) {
+      for (const { tableName, } of existingTriggers) {
         await this.dropListenerTrigger(client, tableName);
       }
     });
@@ -73,24 +71,6 @@ export default class DatabaseClient {
     }
   }
 
-  async syncListeners(requiredListeners: Record<string, TOperation[]>) {
-    await this.transaction(async client => {
-      const existingTriggers = await this.findListenerTriggers(client);
-
-      const triggersToRemove = Object
-        .keys(existingTriggers)
-        .filter(tableName => !requiredListeners[tableName]?.length);
-
-      for (const tableName of triggersToRemove) {
-        await this.dropListenerTrigger(client, tableName);
-      }
-
-      for (const [ tableName, operations, ] of Object.entries(requiredListeners)) {
-        await this.createListenerTrigger(client, tableName, operations);
-      }
-    });
-  }
-
   prefixName(name: string, escaper?: (str: string) => string) {
     const prefixedName = `${this.prefix}__${name}`;
 
@@ -101,30 +81,9 @@ export default class DatabaseClient {
     return escaper?.apply(escaper, [ prefixedName, ]) ?? prefixedName;
   }
 
-  private async findListenerTriggers(client: PoolClient) {
-    const triggerPrefix = this.prefixName('listener_trigger');
+  async createListenerTrigger(client: PoolClient, tableName: string, operations: TOperation[], keepColumns?: string[]) {
+    logger.info(`Creating listener on table ${tableName} (${operations.join(', ')})`);
 
-    const triggers = await client.query<{ tableName: string, operation: TOperation }>(/* sql */ `
-      SELECT event_object_table as "tableName", event_manipulation as "operation"
-      FROM information_schema.triggers
-      WHERE trigger_name LIKE $1
-    `, [ `${triggerPrefix}%`, ]);
-
-    return triggers.rows.reduce(
-      (acc, { tableName, operation, }) => {
-        if (!acc[tableName]) { acc[tableName] = []; }
-
-        if (!acc[tableName].includes(operation)) {
-          acc[tableName].push(operation);
-        }
-
-        return acc;
-      },
-      {} as Record<string, TOperation[]>
-    );
-  }
-
-  private async createListenerTrigger(client: PoolClient, tableName: string, operations: TOperation[], keepColumns?: string[]) {
     const escapedTableName = client.escapeIdentifier(tableName);
     const triggerName = this.prefixName(`listener_trigger_${tableName}`, client.escapeIdentifier);
     const triggerFunctionName = this.prefixName(`listener_trigger_${tableName}_fn`, client.escapeIdentifier);
@@ -134,7 +93,7 @@ export default class DatabaseClient {
     );
 
     const formattedOperations = operations.join(' OR ');
-    if (operations.some(o => !TRIGGER_OPERATIONS.includes(o))) {
+    if (operations.some(o => !isTriggerOperation(o))) {
       throw new Error(`One or more operations is not valid: ${formattedOperations}`);
     }
 
@@ -178,7 +137,7 @@ export default class DatabaseClient {
     `);
   }
 
-  private async dropListenerTrigger(client: PoolClient, tableName: string) {
+  async dropListenerTrigger(client: PoolClient, tableName: string) {
     const escapedTableName = client.escapeIdentifier(tableName);
     const triggerName = this.prefixName(`listener_trigger_${tableName}`, client.escapeIdentifier);
     const triggerFunctionName = this.prefixName(`listener_trigger_${tableName}_fn`, client.escapeIdentifier);
@@ -189,5 +148,32 @@ export default class DatabaseClient {
 
       DROP FUNCTION IF EXISTS ${triggerFunctionName}();
     `);
+  }
+
+  async findListenerTriggers(client: PoolClient): Promise<TTableTrigger[]> {
+    const triggerPrefix = this.prefixName('listener_trigger');
+
+    const triggers = await client.query<{ tableName: string, operation: TOperation }>(/* sql */ `
+      SELECT event_object_table as "tableName", event_manipulation as "operation"
+      FROM information_schema.triggers
+      WHERE trigger_name LIKE $1
+    `, [ `${triggerPrefix}%`, ]);
+
+    const tableOperations = triggers.rows.reduce(
+      (acc, { tableName, operation, }) => {
+        if (!acc[tableName]) { acc[tableName] = []; }
+
+        if (!acc[tableName].includes(operation)) {
+          acc[tableName].push(operation);
+        }
+
+        return acc;
+      },
+      {} as Record<TTableName, TOperation[]>
+    );
+
+    return Object
+      .entries(tableOperations)
+      .map(([ tableName, operations, ]) => ({ tableName, operations, }));
   }
 }

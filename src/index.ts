@@ -1,26 +1,34 @@
-import DatabaseClient, { TConnectionOptions, TOperation } from './_database';
-import EventQueue, { TQueueNotification } from './_event-queue';
+import { TTableName, TOperation, TDatabaseConnectionOptions, TQueueNotification, TTableListener, TRIGGER_OPERATIONS } from './common/types';
+
+import DatabaseClient from './_database';
+import EventQueue from './_event-queue';
 import { TypedEventEmitter } from './common/event-emitter';
 
-export type TOptions = {
-  connectionOptions: TConnectionOptions,
-  listeners: Record<string, boolean | TOperation[]>,
+export type THortonOptions = {
+  connectionOptions: TDatabaseConnectionOptions,
+  tableListeners: Record<TTableName, boolean | TOperation[]>,
   reconciliationFrequency?: number
 };
 
-export type THortonEvents = Record<`${keyof TOptions['listeners']}:${TOperation | '*'}`, object>;
+export type THortonEvents = Record<`${keyof THortonOptions['tableListeners']}:${TOperation | '*'}`, object>;
 
 class Horton extends TypedEventEmitter<THortonEvents> {
   private dbClient: DatabaseClient;
   private eventQueue: EventQueue;
+  private tableListeners: TTableListener[];
 
-  constructor(options: TOptions) {
+  constructor(options: THortonOptions) {
     super({ captureRejections: false, });
+
+    this.tableListeners = this.formatTableListenerOptions(options.tableListeners);
 
     this.dbClient = new DatabaseClient(options.connectionOptions);
     this.eventQueue = new EventQueue(this.dbClient);
 
-    this.eventQueue.on('queued', this.handleQueueNotification);
+    this.eventQueue.on(
+      'queued',
+      notification => this.handleQueueNotification(notification)
+    );
   }
 
   async connect(initializeQueue = true) {
@@ -32,6 +40,8 @@ class Horton extends TypedEventEmitter<THortonEvents> {
     if (initializeQueue) {
       await this.eventQueue.initialize();
     }
+
+    await this.syncListeners();
   }
 
   async disconnect() {
@@ -45,6 +55,29 @@ class Horton extends TypedEventEmitter<THortonEvents> {
   async teardown() {
     await this.dbClient.teardown();
     await this.eventQueue.teardown();
+  }
+
+  private formatTableListenerOptions(options: THortonOptions['tableListeners']): TTableListener[] {
+    return Object
+      .entries(options)
+      .map(([ tableName, config, ]) => {
+        if (Array.isArray(config)) {
+          return { tableName, operations: config, };
+        }
+
+        const operations = config ? TRIGGER_OPERATIONS : [];
+
+        return { tableName, operations: operations as TOperation[], };
+      })
+      .filter(({ operations, }) => operations.length);
+  }
+
+  private async syncListeners() {
+    await this.dbClient.transaction(async client => {
+      for (const { tableName, operations, } of this.tableListeners) {
+        await this.dbClient.createListenerTrigger(client, tableName, operations);
+      }
+    });
   }
 
   private async handleQueueNotification(notification: TQueueNotification) {

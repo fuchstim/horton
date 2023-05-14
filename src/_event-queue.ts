@@ -1,31 +1,12 @@
 import Logger from './common/logger';
 const logger = Logger.ns('EventQueue');
 
-import DatabaseClient, { TOperation } from './_database';
+import type DatabaseClient from './_database';
+import { EBuiltinDatabaseObjectNames, TQueueEvents, TQueueNotification, TQueueRow } from './common/types';
+
 import { PoolClient } from 'pg';
-import { EBuiltinDatabaseObjectNames } from './common/constants';
 import EventEmitter from './common/event-emitter';
 import { isTriggerOperation } from './common/utils';
-
-export type TRowId = number;
-export type TQueueNotification = {
-  rowId: TRowId,
-  tableName: string,
-  operation: TOperation
-};
-
-export type TQueueEvents = {
-  queued: TQueueNotification
-};
-
-export type TQueueRow = {
-  id: TRowId,
-  tableName: string,
-  operation: TOperation,
-  previousRecord: object | undefined,
-  currentRecord: object,
-  queuedAt: Date,
-};
 
 export default class EventQueue extends EventEmitter<TQueueEvents> {
   private dbClient: DatabaseClient;
@@ -181,7 +162,7 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
     await client.query(/* sql */ `
       CREATE OR REPLACE FUNCTION ${triggerFunctionName}() RETURNS trigger AS $$
         BEGIN
-          PERFORM pg_notify(${notificationChannelName}, CONCAT(NEW."id", ':', NEW."tableName", ':', NEW."OPERATION"));
+          PERFORM pg_notify(${notificationChannelName}, CONCAT(NEW."id", ':', NEW."tableName", ':', NEW."operation"));
           
           RETURN NEW;
         END;
