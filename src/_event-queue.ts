@@ -1,17 +1,25 @@
-import Logger from '../common/logger';
-const logger = Logger.ns('DatabaseClient', 'Queue');
+import Logger from './common/logger';
+const logger = Logger.ns('EventQueue');
 
-import DatabaseClient, { TOperation } from '.';
+import DatabaseClient, { TOperation } from './_database';
 import { PoolClient } from 'pg';
-import { EBuiltinDatabaseObjectNames } from '../common/constants';
-import EventEmitter from '../common/event-emitter';
+import { EBuiltinDatabaseObjectNames } from './common/constants';
+import EventEmitter from './common/event-emitter';
+import { isTriggerOperation } from './common/utils';
 
-export type TQueueEvents = {
-  queued: number
+export type TRowId = number;
+export type TQueueNotification = {
+  rowId: TRowId,
+  tableName: string,
+  operation: TOperation
 };
 
-export type TEventQueueRow = {
-  id: number,
+export type TQueueEvents = {
+  queued: TQueueNotification
+};
+
+export type TQueueRow = {
+  id: TRowId,
   tableName: string,
   operation: TOperation,
   previousRecord: object | undefined,
@@ -54,7 +62,7 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
     await this.dbClient.transaction(client => this.drop(client));
   }
 
-  async resolveRow(client: PoolClient, rowId: number): Promise<TEventQueueRow | undefined> {
+  async resolveRow(client: PoolClient, rowId: number): Promise<TQueueRow | undefined> {
     logger.debug(`Resolving row ${rowId}`);
 
     const tableName = this.dbClient.prefixName(
@@ -62,7 +70,7 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
       client.escapeIdentifier
     );
 
-    const results = await client.query<TEventQueueRow>(/* sql */`
+    const results = await client.query<TQueueRow>(/* sql */`
       SELECT *
       FROM ${tableName}
       WHERE id = $1
@@ -173,7 +181,7 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
     await client.query(/* sql */ `
       CREATE OR REPLACE FUNCTION ${triggerFunctionName}() RETURNS trigger AS $$
         BEGIN
-          PERFORM pg_notify(${notificationChannelName}, NEW.id::TEXT);
+          PERFORM pg_notify(${notificationChannelName}, CONCAT(NEW."id", ':', NEW."tableName", ':', NEW."OPERATION"));
           
           RETURN NEW;
         END;
@@ -192,11 +200,19 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
     const client = await this.dbClient.createClient();
 
     client.on('notification', async message => {
-      const rowId = Number(message.payload);
+      const [ rowId, tableName, operation, ] = message.payload?.split(':') ?? [];
 
-      if (Number.isNaN(rowId)) { return; }
+      if (!rowId || !tableName || !operation || !isTriggerOperation(operation)) {
+        return;
+      }
 
-      this.emit('queued', rowId);
+      const notification: TQueueNotification = {
+        rowId: Number(rowId),
+        tableName,
+        operation,
+      };
+
+      this.emit('queued', notification);
     });
 
     const notificationChannelName = this.dbClient.prefixName(

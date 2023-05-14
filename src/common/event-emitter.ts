@@ -23,8 +23,8 @@ type TBuiltinEvents = {
 export class TypedEventEmitter<T extends TEventTypeMap> extends BaseEventEmitter {
   private proxies: TProxy<T>[] = [];
 
-  constructor() {
-    super({ captureRejections: true, });
+  constructor(options?: { captureRejections?: boolean }) {
+    super({ ...options, captureRejections: true, });
   }
 
   override on<N extends TEventName<T>>(eventName: N, listener: TEventListener<T[N]>) {
@@ -41,6 +41,18 @@ export class TypedEventEmitter<T extends TEventTypeMap> extends BaseEventEmitter
       .forEach(p => p.target.emit(eventName, payload));
 
     return super.emit(eventName, payload);
+  }
+
+  async emitSync<N extends TEventName<T>>(eventName: N, payload: T[N]) {
+    const listeners = this.rawListeners(eventName);
+
+    await Promise.all(
+      listeners.map(
+        listener => Promise
+          .resolve(listener.apply(listener, [ payload, ]))
+          .catch(() => null)
+      )
+    );
   }
 
   registerProxy(target: TypedEventEmitter<T>, filterFn?: TProxyFilterFn<T>) {

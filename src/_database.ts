@@ -1,10 +1,9 @@
-import Logger from '../common/logger';
+import Logger from './common/logger';
 const logger = Logger.ns('DatabaseClient');
 
 import { Pool, PoolClient, PoolConfig } from 'pg';
-import { validatePostgresString } from '../common/utils';
-import { EBuiltinDatabaseObjectNames, TRIGGER_OPERATIONS } from '../common/constants';
-import EventQueue from './_event-queue';
+import { validatePostgresString } from './common/utils';
+import { EBuiltinDatabaseObjectNames, TRIGGER_OPERATIONS } from './common/constants';
 
 export type TConnectionOptions = PoolConfig & { prefix?: string };
 export type TOperation = typeof TRIGGER_OPERATIONS[number];
@@ -13,8 +12,6 @@ export default class DatabaseClient {
   private pool: Pool;
   private prefix: string;
 
-  private eventQueue: EventQueue;
-
   constructor(options: TConnectionOptions) {
     this.pool = new Pool(options);
     this.prefix = options.prefix || 'horton-meta';
@@ -22,15 +19,12 @@ export default class DatabaseClient {
     if (!validatePostgresString(this.prefix)) {
       throw new Error(`Invalid prefix: ${this.prefix}`);
     }
-
-    this.eventQueue = new EventQueue(this);
   }
 
   async connect() {
     logger.debug('Connecting...');
 
     await this.pool.connect();
-    await this.eventQueue.connect();
 
     logger.debug('Connected.');
   }
@@ -38,18 +32,9 @@ export default class DatabaseClient {
   async disconnect() {
     logger.debug('Disconnecting...');
 
-    await this.eventQueue.disconnect();
     await this.pool.end();
 
     logger.debug('Disconnected.');
-  }
-
-  async initialize() {
-    logger.debug('Initializing...');
-
-    await this.eventQueue.initialize();
-
-    logger.debug('Initialized.');
   }
 
   async teardown() {
@@ -60,8 +45,6 @@ export default class DatabaseClient {
         await this.dropListenerTrigger(client, tableName);
       }
     });
-
-    await this.eventQueue.teardown();
   }
 
   async createClient() {
