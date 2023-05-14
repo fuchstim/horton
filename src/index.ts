@@ -1,6 +1,5 @@
-import { UUID, randomUUID } from 'crypto';
-
-import DatabaseClient, { TOperation, TConnectionOptions } from './_db';
+import DatabaseClient, { TConnectionOptions } from './database';
+import Listener from './_listener';
 
 export type TOptions = {
   connectionOptions: TConnectionOptions,
@@ -9,75 +8,36 @@ export type TOptions = {
 
 class Horton {
   dbClient: DatabaseClient;
-  private connected = false;
-  private listeners: Record<UUID, { tableName: string, operations: TOperation[] }> = {};
 
   constructor(options: TOptions) {
     this.dbClient = new DatabaseClient(options.connectionOptions);
   }
 
-  async connect() {
+  async connect(initialize = true) {
     await this.dbClient.connect();
 
-    this.dbClient.onQueued(rowId => { this.onQueued(rowId); });
+    await this.teardown(); // TODO: Remove
 
-    await this.dbClient.teardown();
-    await this.dbClient.initialize();
-
-    this.connected = true;
+    if (initialize) {
+      await this.dbClient.initialize();
+    }
   }
 
   async disconnect() {
+    // Stop listening for queue events
+    // Flush listeners
+    // Disconnect database
     await this.dbClient.disconnect();
   }
 
-  async createListener(tableName: string, operations: TOperation[] = []) {
-    if (!this.connected) {
-      throw new Error('Must connect before creating listener');
-    }
-
-    if (!tableName || !operations.length) {
-      throw new Error('Table name and operations must be specified');
-    }
-
-    const listenerId = randomUUID();
-
-    this.listeners[listenerId] = { tableName, operations, };
-
-    await this.syncListeners();
-
-    return listenerId;
+  async teardown() {
+    await this.dbClient.teardown();
   }
 
-  async removeListener(listenerId: UUID) {
-    delete this.listeners[listenerId];
+  createListener(tableName: string) {
+    const listener = new Listener(this.dbClient, tableName);
 
-    await this.syncListeners();
-  }
-
-  private async syncListeners() {
-    const requiredListeners = Object.values(this.listeners).reduce(
-      (acc, { tableName, operations, }) => {
-        if (!acc[tableName]) {
-          acc[tableName] = [];
-        }
-
-        for (const operation of operations) {
-          if (!acc[tableName].includes(operation)) {
-            acc[tableName].push(operation);
-          }
-        }
-
-        return acc;
-      },
-      {} as Record<string, TOperation[]>
-    );
-
-    await this.dbClient.syncListeners(requiredListeners);
-  }
-
-  private async onQueued(queueRowId: number) {
-    debugger;
+    return listener;
   }
 }
 

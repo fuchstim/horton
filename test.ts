@@ -3,13 +3,15 @@ import Horton from './src';
 async function run() {
   const h = new Horton({
     connectionOptions: {
-      connectionString: 'postgres://postgres:postgrespw@localhost:32768',
+      connectionString: 'postgres://postgres:postgrespw@localhost:32776',
     },
   });
 
   await h.connect();
 
-  await h.createListener('test_table', [ 'INSERT', ]);
+  const listener = h.createListener('test_table');
+
+  // listener.on('INSERT',
 }
 
 run()

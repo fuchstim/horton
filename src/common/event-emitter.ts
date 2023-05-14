@@ -1,16 +1,31 @@
 import BaseEventEmitter from 'events';
 
-type TEventTypeMap = Record<string, object>;
+type TEventTypeMap = Record<string, string | number | object>;
 type TEventName<T extends TEventTypeMap> = string & keyof T;
 type TEventListener<T> = (payload: T) => void | Promise<void>;
 
+type TProxyFilterFn<T extends TEventTypeMap> = (
+  eventName: TEventName<T>,
+  payload: T[TEventName<T>]
+) => boolean | Promise<boolean>;
+
 type TProxy<T extends TEventTypeMap> = {
-  target: EventEmitter<T>,
-  eventNames?: TEventName<T>[]
+  target: TypedEventEmitter<T>,
+  filterFn?: TProxyFilterFn<T>
 };
 
-export default class EventEmitter<T extends TEventTypeMap> extends BaseEventEmitter {
+type TBuiltinEvents = {
+  error: Error,
+  newListener: string,
+  removeListener: string
+};
+
+export class TypedEventEmitter<T extends TEventTypeMap> extends BaseEventEmitter {
   private proxies: TProxy<T>[] = [];
+
+  constructor() {
+    super({ captureRejections: true, });
+  }
 
   override on<N extends TEventName<T>>(eventName: N, listener: TEventListener<T[N]>) {
     return super.on(eventName, listener);
@@ -22,21 +37,23 @@ export default class EventEmitter<T extends TEventTypeMap> extends BaseEventEmit
 
   override emit<N extends TEventName<T>>(eventName: N, payload: T[N]) {
     this.proxies
-      .filter(p => p.eventNames?.includes(eventName) ?? true)
+      .filter(p => p.filterFn?.apply(p, [ eventName, payload, ]) ?? true)
       .forEach(p => p.target.emit(eventName, payload));
 
     return super.emit(eventName, payload);
   }
 
-  registerProxy(target: EventEmitter<T>, eventNames?: TEventName<T>[]) {
-    this.proxies.push({ target, eventNames, });
+  registerProxy(target: TypedEventEmitter<T>, filterFn?: TProxyFilterFn<T>) {
+    this.proxies.push({ target, filterFn, });
   }
 
-  deregisterProxy(target: EventEmitter<T>) {
+  deregisterProxy(target: TypedEventEmitter<T>) {
     this.proxies = this.proxies.filter(p => p.target !== target);
   }
 
-  override addListener<N extends TEventName<T>>(eventName: N, listener: TEventListener<T[N]>) {
+  override addListener<
+    N extends TEventName<T>
+  >(eventName: N, listener: TEventListener<T[N]>) {
     return super.addListener(eventName, listener);
   }
 
@@ -44,7 +61,9 @@ export default class EventEmitter<T extends TEventTypeMap> extends BaseEventEmit
     return super.once(eventName, listener);
   }
 
-  override removeListener<N extends TEventName<T>>(eventName: N, listener: TEventListener<T[N]>) {
+  override removeListener<
+    N extends TEventName<T>
+  >(eventName: N, listener: TEventListener<T[N]>) {
     return super.removeListener(eventName, listener);
   }
 
@@ -64,11 +83,15 @@ export default class EventEmitter<T extends TEventTypeMap> extends BaseEventEmit
     return super.listenerCount(eventName);
   }
 
-  override prependListener<N extends TEventName<T>>(eventName: N, listener: TEventListener<T[N]>) {
+  override prependListener<
+    N extends TEventName<T>
+  >(eventName: N, listener: TEventListener<T[N]>) {
     return super.prependListener(eventName, listener);
   }
 
-  override prependOnceListener<N extends TEventName<T>>(eventName: N, listener: TEventListener<T[N]>) {
+  override prependOnceListener<
+    N extends TEventName<T>
+  >(eventName: N, listener: TEventListener<T[N]>) {
     return super.prependOnceListener(eventName, listener);
   }
 
@@ -76,3 +99,5 @@ export default class EventEmitter<T extends TEventTypeMap> extends BaseEventEmit
     return super.eventNames() as unknown as TEventName<T>[];
   }
 }
+
+export default class EventEmitter<T extends TEventTypeMap> extends TypedEventEmitter<T & TBuiltinEvents> {}
