@@ -2,7 +2,7 @@
 
 <div align="center">
   <a href="https://github.com/fuchstim/horton">
-    <img src="images/logo.png" alt="Logo" width="200" height="80">
+    <img src="images/logo.png" alt="Logo" width="320" height="100">
   </a>
 
 <h3 align="center">horton</h3>
