@@ -28,3 +28,4 @@ Please refer to the installation and usage guides in the [project wiki](https://
 - [ ] Improve logging
 - [ ] Periodic reconciliation
 - [ ] Heartbeat checker
+- [ ] Retry on error
