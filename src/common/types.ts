@@ -1,13 +1,22 @@
 import { PoolConfig } from 'pg';
 
-export const TRIGGER_OPERATIONS = [ 'INSERT', 'UPDATE', 'DELETE', ] as const;
-export type TOperation = typeof TRIGGER_OPERATIONS[number];
+export enum ETriggerOperation {
+  INSERT = 'INSERT',
+  UPDATE = 'UPDATE',
+  DELETE = 'DELETE',
+}
+
+export enum EInternalOperation {
+  LIVENESS_PULSE = 'LIVENESS_PULSE'
+}
 
 export enum EBuiltinDatabaseObjectNames {
   EVENT_QUEUE_TABLE = 'event_queue',
   EVENT_QUEUE_TRIGGER = 'event_queue_trigger',
   EVENT_QUEUE_TRIGGER_FUNCTION = 'event_queue_trigger_function',
   EVENT_QUEUE_NOTIFICATION_CHANNEL = 'event_queue_notifications',
+
+  INTERNAL_PSEUDO_TABLE = 'internal',
 }
 
 export type TTableName = string;
@@ -18,37 +27,41 @@ export type TQueueRowId = number;
 export type TQueueNotification = {
   rowId: TQueueRowId,
   tableName: TTableName,
-  operation: TOperation
+  operation: EInternalOperation | ETriggerOperation,
+  isInternal: boolean,
 };
 
-export type TQueueEvents = {
-  queued: TQueueNotification
-};
+export type TQueueEvents = Record<
+  `internal:${EInternalOperation}` | `queued:${TTableName}:${ETriggerOperation}`,
+  TQueueRowId
+>;
 
 export type TQueueRow = {
   id: TQueueRowId,
   tableName: TTableName,
-  operation: TOperation,
-  previousRecord: object | undefined,
+  operation: ETriggerOperation | EInternalOperation,
+  previousRecord?: object,
   currentRecord: object,
   queuedAt: Date,
 };
 
-export type TDatabaseConnectionOptions = PoolConfig & { prefix?: string };
+export type TTriggerQueueRow = TQueueRow & { operation: ETriggerOperation };
+export type TInternalQueueRow = TQueueRow & { operation: EInternalOperation };
 
 export type TTableTrigger = {
   tableName: TTableName,
-  operations: TOperation[],
+  operations: ETriggerOperation[],
   recordColumns?: TColumnName[]
 };
 
 export type TTableListener = TTableTrigger;
 
-export type TSimpleTableListenerOptions = TOperation[];
+// Public types
+export type TDatabaseConnectionOptions = PoolConfig & { prefix?: string };
 
+export type TSimpleTableListenerOptions = `${ETriggerOperation}`[];
 export type TAdvancedTableListenerOptions = {
-  operations: TOperation[]
+  operations: `${ETriggerOperation}`[]
   recordColumns: TColumnName[]
 };
-
 export type TTableListenerOptions = TSimpleTableListenerOptions | TAdvancedTableListenerOptions;

@@ -2,11 +2,11 @@ import Logger from './common/logger';
 const logger = Logger.ns('EventQueue');
 
 import type DatabaseClient from './_database';
-import { EBuiltinDatabaseObjectNames, TQueueEvents, TQueueNotification, TQueueRow, TQueueRowId } from './common/types';
+import { EBuiltinDatabaseObjectNames, EInternalOperation, TQueueEvents, TQueueNotification, TQueueRow, TQueueRowId } from './common/types';
 
 import { PoolClient } from 'pg';
 import EventEmitter from './common/event-emitter';
-import { isTriggerOperation } from './common/utils';
+import { isInternalOperation, isTriggerOperation } from './common/utils';
 
 export default class EventQueue extends EventEmitter<TQueueEvents> {
   private dbClient: DatabaseClient;
@@ -14,7 +14,7 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
   private reconciliationIntervalMs: number;
   private reconciliationTimer?: NodeJS.Timer;
 
-  constructor(dbClient: DatabaseClient, reconciliationIntervalMs = 5_000) {
+  constructor(dbClient: DatabaseClient, reconciliationIntervalMs: number) {
     super();
 
     this.dbClient = dbClient;
@@ -55,7 +55,33 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
     await this.dbClient.transaction(client => this.drop(client));
   }
 
-  async dequeue<T>(rowId: TQueueRowId, callback: (row: TQueueRow) => T | Promise<T>): Promise<T | undefined> {
+  async queue(row: Omit<TQueueRow, 'id'>) {
+    await this.dbClient.transaction(async client => {
+      const tableName = this.dbClient.prefixName(
+        EBuiltinDatabaseObjectNames.EVENT_QUEUE_TABLE,
+        client.escapeIdentifier
+      );
+
+      await client.query(/* sql */ `
+        INSERT INTO ${tableName} ("tableName", "operation", "previousRecord", "currentRecord", "queuedAt")
+        VALUES ($1, $2, $3, $4, $5)
+      `, [ row.tableName, row.operation, row.previousRecord, row.currentRecord, row.queuedAt, ]);
+    });
+  }
+
+  async queueInternal(operation: EInternalOperation, metadata: object = {}) {
+    await this.queue({
+      tableName: this.dbClient.prefixName(EBuiltinDatabaseObjectNames.INTERNAL_PSEUDO_TABLE),
+      operation,
+      currentRecord: metadata,
+      queuedAt: new Date(),
+    });
+  }
+
+  async dequeue<T extends TQueueRow, R>(
+    rowId: TQueueRowId,
+    callback: (row: T) => R | Promise<R>
+  ): Promise<R | undefined> {
     logger.debug(`Resolving row ${rowId}`);
 
     const result = await this.dbClient.transaction(async client => {
@@ -64,7 +90,7 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
         client.escapeIdentifier
       );
 
-      const results = await client.query<TQueueRow>(/* sql */`
+      const results = await client.query<T>(/* sql */`
         SELECT *
         FROM ${tableName}
         WHERE id = $1
@@ -210,10 +236,16 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
       this.notificationListenerClient = await this.dbClient.createClient();
     }
 
+    const internalPseudoTableName = this.dbClient.prefixName(EBuiltinDatabaseObjectNames.INTERNAL_PSEUDO_TABLE);
+
     this.notificationListenerClient.on('notification', async message => {
       const [ rowId, tableName, operation, ] = message.payload?.split(':') ?? [];
 
-      if (!rowId || !tableName || !operation || !isTriggerOperation(operation)) {
+      if (!rowId || !tableName || !operation) {
+        return;
+      }
+
+      if (!isTriggerOperation(operation) && !isInternalOperation(operation)) {
         return;
       }
 
@@ -221,9 +253,10 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
         rowId: Number(rowId),
         tableName,
         operation,
+        isInternal: tableName === internalPseudoTableName,
       };
 
-      this.emit('queued', notification);
+      // this.emitNotification(notification);
     });
 
     const notificationChannelName = this.dbClient.prefixName(
@@ -234,6 +267,18 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
     await this.notificationListenerClient.query(`LISTEN ${notificationChannelName}`);
   }
 
+  private emitNotification(notification: TQueueNotification) {
+    const { rowId, tableName, operation, isInternal, } = notification;
+
+    if (isInternal && isInternalOperation(operation)) {
+      this.emit(`internal:${operation}`, rowId);
+    }
+
+    if (!isInternal && isTriggerOperation(operation)) {
+      this.emit(`queued:${tableName}:${operation}`, rowId);
+    }
+  }
+
   private async stopListening() {
     await this.notificationListenerClient?.release(true);
   }
@@ -242,14 +287,23 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
     logger.debug('Beginning reconciliation...');
 
     await this.dbClient.transaction(async client => {
-      const tableName = this.dbClient.prefixName(
+      const pseudoTableName = this.dbClient.prefixName(
+        EBuiltinDatabaseObjectNames.INTERNAL_PSEUDO_TABLE,
+        client.escapeLiteral
+      );
+
+      const queueTableName = this.dbClient.prefixName(
         EBuiltinDatabaseObjectNames.EVENT_QUEUE_TABLE,
         client.escapeIdentifier
       );
 
       const data = await client.query<TQueueNotification>(/* sql */ `
-        SELECT id AS "rowId", "tableName", "operation"
-        FROM ${tableName}
+        SELECT 
+          id AS "rowId",
+          "tableName",
+          "operation",
+          "tableName" = ${pseudoTableName} AS "isInternal"
+        FROM ${queueTableName}
         ORDER BY "queuedAt" ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1000
@@ -263,7 +317,9 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
 
       logger.debug(`${data.rowCount} queued events to reconcile`);
 
-      data.rows.forEach(notification => this.emit('queued', notification));
+      data.rows.forEach(
+        notification => this.emitNotification(notification)
+      );
     });
   }
 }

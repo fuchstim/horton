@@ -1,7 +1,7 @@
 import Logger from './common/logger';
 const logger = Logger.ns('DatabaseClient');
 
-import { EBuiltinDatabaseObjectNames, TDatabaseConnectionOptions, TOperation, TTableName, TTableTrigger } from './common/types';
+import { EBuiltinDatabaseObjectNames, TDatabaseConnectionOptions, ETriggerOperation, TTableName, TTableTrigger } from './common/types';
 
 import { Pool, PoolClient } from 'pg';
 import { isTriggerOperation, validatePostgresString } from './common/utils';
@@ -158,7 +158,7 @@ export default class DatabaseClient {
   async findListenerTriggers(client: PoolClient): Promise<TTableTrigger[]> {
     const triggerPrefix = this.prefixName('listener_trigger');
 
-    const triggers = await client.query<{ tableName: string, operation: TOperation }>(/* sql */ `
+    const triggers = await client.query<{ tableName: string, operation: ETriggerOperation }>(/* sql */ `
       SELECT event_object_table as "tableName", event_manipulation as "operation"
       FROM information_schema.triggers
       WHERE trigger_name LIKE $1
@@ -174,7 +174,7 @@ export default class DatabaseClient {
 
         return acc;
       },
-      {} as Record<TTableName, TOperation[]>
+      {} as Record<TTableName, ETriggerOperation[]>
     );
 
     return Object

@@ -23,9 +23,13 @@ Please refer to the installation and usage guides in the [project wiki](https://
 
 ## Roadmap
 - [ ] Support concurrent instances
-  - Claim ownership of table subscription
-- [ ] More flexible listeners (e.g. on field change, conditions)
+  - [ ] Claim ownership of table subscription
+- [ ] Advanced listener config
+  - [x] Columns to record
+  - [ ] Filter on field change
+  - [ ] Dequeuing priority
 - [ ] Improve logging, add logging config options
 - [x] Periodic reconciliation
 - [ ] Heartbeat checker
 - [ ] Retry on error
+- [ ] Support other RDBMS

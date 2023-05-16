@@ -1,4 +1,4 @@
-import { TOperation, TRIGGER_OPERATIONS } from './types';
+import { EInternalOperation, ETriggerOperation } from './types';
 
 export function validatePostgresString(str: string) {
   const match = /^([a-z-_])+$/.exec(str);
@@ -6,6 +6,10 @@ export function validatePostgresString(str: string) {
   return !!match;
 }
 
-export function isTriggerOperation(str: string): str is TOperation {
-  return TRIGGER_OPERATIONS.includes(str as unknown as TOperation);
+export function isTriggerOperation(str: string): str is ETriggerOperation {
+  return Object.values(ETriggerOperation).includes(str as ETriggerOperation);
+}
+
+export function isInternalOperation(str: string): str is EInternalOperation {
+  return Object.values(EInternalOperation).includes(str as EInternalOperation);
 }
