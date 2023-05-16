@@ -25,7 +25,7 @@ Please refer to the installation and usage guides in the [project wiki](https://
 - [ ] Support concurrent instances
   - Claim ownership of table subscription
 - [ ] More flexible listeners (e.g. on field change, conditions)
-- [ ] Improve logging
-- [ ] Periodic reconciliation
+- [ ] Improve logging, add logging config options
+- [x] Periodic reconciliation
 - [ ] Heartbeat checker
 - [ ] Retry on error
