@@ -10,6 +10,7 @@ import { isTriggerOperation } from './common/utils';
 
 export default class EventQueue extends EventEmitter<TQueueEvents> {
   private dbClient: DatabaseClient;
+  private notificationListenerClient?: PoolClient;
   private reconciliationIntervalMs: number;
   private reconciliationTimer?: NodeJS.Timer;
 
@@ -35,7 +36,7 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
   async disconnect() {
     clearInterval(this.reconciliationTimer);
 
-    // TODO: Flush all listeners
+    await this.stopListening();
   }
 
   async initialize() {
@@ -205,9 +206,11 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
   }
 
   private async startListening() {
-    const client = await this.dbClient.createClient();
+    if (!this.notificationListenerClient) {
+      this.notificationListenerClient = await this.dbClient.createClient();
+    }
 
-    client.on('notification', async message => {
+    this.notificationListenerClient.on('notification', async message => {
       const [ rowId, tableName, operation, ] = message.payload?.split(':') ?? [];
 
       if (!rowId || !tableName || !operation || !isTriggerOperation(operation)) {
@@ -225,10 +228,14 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
 
     const notificationChannelName = this.dbClient.prefixName(
       EBuiltinDatabaseObjectNames.EVENT_QUEUE_NOTIFICATION_CHANNEL,
-      client.escapeIdentifier
+      this.notificationListenerClient.escapeIdentifier
     );
 
-    await client.query(`LISTEN ${notificationChannelName}`);
+    await this.notificationListenerClient.query(`LISTEN ${notificationChannelName}`);
+  }
+
+  private async stopListening() {
+    await this.notificationListenerClient?.release(true);
   }
 
   private async reconcileQueuedEvents() {
