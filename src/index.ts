@@ -23,7 +23,7 @@ class Horton extends TypedEventEmitter<THortonEvents> {
     this.tableListeners = this.formatTableListenerOptions(options.tableListeners);
 
     this.dbClient = new DatabaseClient(options.connectionOptions);
-    this.eventQueue = new EventQueue(this.dbClient);
+    this.eventQueue = new EventQueue(this.dbClient, options.reconciliationFrequency);
 
     this.eventQueue.on(
       'queued',
@@ -36,6 +36,8 @@ class Horton extends TypedEventEmitter<THortonEvents> {
     await this.eventQueue.connect();
 
     await this.teardown(); // TODO: Remove
+    await this.dbClient.connect();
+    await this.eventQueue.connect();
 
     if (initializeQueue) {
       await this.eventQueue.initialize();
@@ -81,15 +83,13 @@ class Horton extends TypedEventEmitter<THortonEvents> {
   }
 
   private async handleQueueNotification(notification: TQueueNotification) {
-    await this.dbClient.transaction(async client => {
-      const row = await this.eventQueue.resolveRow(client, notification.rowId);
-      if (!row) { return; }
-
-      await Promise.all([
+    await this.eventQueue.dequeue(
+      notification.rowId,
+      row => Promise.all([
         this.emitSync(`${row.tableName}:${row.operation}`, row),
         this.emitSync(`${row.tableName}:*`, row),
-      ]);
-    });
+      ])
+    );
   }
 }
 

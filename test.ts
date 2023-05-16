@@ -3,7 +3,7 @@ import Horton from './src';
 async function run() {
   const h = new Horton({
     connectionOptions: {
-      connectionString: 'postgres://postgres:postgrespw@localhost:32776',
+      connectionString: 'postgres://postgres:postgrespw@127.0.0.1:5432',
     },
     tableListeners: {
       test_table: true,

@@ -2,7 +2,7 @@ import Logger from './common/logger';
 const logger = Logger.ns('EventQueue');
 
 import type DatabaseClient from './_database';
-import { EBuiltinDatabaseObjectNames, TQueueEvents, TQueueNotification, TQueueRow } from './common/types';
+import { EBuiltinDatabaseObjectNames, TQueueEvents, TQueueNotification, TQueueRow, TQueueRowId } from './common/types';
 
 import { PoolClient } from 'pg';
 import EventEmitter from './common/event-emitter';
@@ -10,11 +10,14 @@ import { isTriggerOperation } from './common/utils';
 
 export default class EventQueue extends EventEmitter<TQueueEvents> {
   private dbClient: DatabaseClient;
+  private reconciliationIntervalMs: number;
+  private reconciliationTimer?: NodeJS.Timer;
 
-  constructor(dbClient: DatabaseClient) {
+  constructor(dbClient: DatabaseClient, reconciliationIntervalMs = 5_000) {
     super();
 
     this.dbClient = dbClient;
+    this.reconciliationIntervalMs = reconciliationIntervalMs;
   }
 
   async connect() {
@@ -22,10 +25,16 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
       .then(() => logger.info('Started listening'))
       .catch(error => logger.error('Failed to start listening', error));
 
-    // TODO: Start periodic reconciliation
+    logger.debug(`Beginning reconciliation every ${this.reconciliationIntervalMs / 1_000}s`);
+    this.reconciliationTimer = setInterval(
+      () => this.reconcileQueuedEvents(),
+      this.reconciliationIntervalMs
+    );
   }
 
   async disconnect() {
+    clearInterval(this.reconciliationTimer);
+
     // TODO: Flush all listeners
   }
 
@@ -40,31 +49,49 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
   }
 
   async teardown() {
+    await this.disconnect();
+
     await this.dbClient.transaction(client => this.drop(client));
   }
 
-  async resolveRow(client: PoolClient, rowId: number): Promise<TQueueRow | undefined> {
+  async dequeue<T>(rowId: TQueueRowId, callback: (row: TQueueRow) => T | Promise<T>): Promise<T | undefined> {
     logger.debug(`Resolving row ${rowId}`);
 
-    const tableName = this.dbClient.prefixName(
-      EBuiltinDatabaseObjectNames.EVENT_QUEUE_TABLE,
-      client.escapeIdentifier
-    );
+    const result = await this.dbClient.transaction(async client => {
+      const tableName = this.dbClient.prefixName(
+        EBuiltinDatabaseObjectNames.EVENT_QUEUE_TABLE,
+        client.escapeIdentifier
+      );
 
-    const results = await client.query<TQueueRow>(/* sql */`
-      SELECT *
-      FROM ${tableName}
-      WHERE id = $1
-      FOR UPDATE
-    `, [ rowId, ]);
+      const results = await client.query<TQueueRow>(/* sql */`
+        SELECT *
+        FROM ${tableName}
+        WHERE id = $1
+        FOR UPDATE
+      `, [ rowId, ]);
 
-    if (!results.rowCount) {
-      logger.debug(`Failed to resolve row ${rowId}`);
+      if (!results.rowCount) {
+        logger.debug(`Failed to resolve row ${rowId}`);
 
-      return;
-    }
+        return;
+      }
 
-    return results.rows[0];
+      const [ row, ] = results.rows;
+
+      const result = await Promise.resolve(
+        callback.apply(callback, [ row, ])
+      );
+
+      await client.query(/* sql */`
+        DELETE
+        FROM ${tableName}
+        WHERE id = $1
+      `, [ rowId, ]);
+
+      return result;
+    });
+
+    return result;
   }
 
   private async create(client: PoolClient) {
@@ -202,5 +229,34 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
     );
 
     await client.query(`LISTEN ${notificationChannelName}`);
+  }
+
+  private async reconcileQueuedEvents() {
+    logger.debug('Beginning reconciliation...');
+
+    await this.dbClient.transaction(async client => {
+      const tableName = this.dbClient.prefixName(
+        EBuiltinDatabaseObjectNames.EVENT_QUEUE_TABLE,
+        client.escapeIdentifier
+      );
+
+      const data = await client.query<TQueueNotification>(/* sql */ `
+        SELECT id AS "rowId", "tableName", "operation"
+        FROM ${tableName}
+        ORDER BY "queuedAt" ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1000
+      `);
+
+      if (!data.rowCount) {
+        logger.debug('Nothing to reconcile');
+
+        return;
+      }
+
+      logger.debug(`${data.rowCount} queued events to reconcile`);
+
+      data.rows.forEach(notification => this.emit('queued', notification));
+    });
   }
 }
