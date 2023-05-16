@@ -29,10 +29,15 @@ class Horton extends TypedEventEmitter<THortonEvents> {
     const reconciliationFrequency = options.reconciliationFrequency ?? 10_000;
     this.eventQueue = new EventQueue(this.dbClient, reconciliationFrequency);
     this.livenessChecker = new LivenessChecker(this.eventQueue, reconciliationFrequency + 5_000);
+
+    this.livenessChecker.on(
+      'unhealthy',
+      () => this.eventQueue.reconnect()
+    );
   }
 
   async connect(initializeQueue = true) {
-    await this.teardown(); // TODO: Remove
+    // await this.teardown(); // TODO: Remove
 
     await this.dbClient.connect();
     await this.eventQueue.connect();
@@ -46,10 +51,11 @@ class Horton extends TypedEventEmitter<THortonEvents> {
     this.livenessChecker.start();
   }
 
-  async disconnect() {
+  async disconnect(gracePeriod?: number) {
     this.livenessChecker.stop();
 
-    await this.eventQueue.disconnect();
+    await this.eventQueue.disconnect(gracePeriod);
+
     await this.dbClient.disconnect();
   }
 

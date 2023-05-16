@@ -8,13 +8,14 @@ async function run() {
     tableListeners: {
       test_table: [ 'INSERT', 'UPDATE', 'DELETE', ],
     },
+    reconciliationFrequency: 5_000,
   });
 
   await h.connect();
 
-  h.on('test_table:INSERT', (...args: unknown[]) => {
-    debugger;
-  });
+  // h.on('test_table:INSERT', (...args: unknown[]) => {
+  //   // debugger;
+  // });
 }
 
 run()

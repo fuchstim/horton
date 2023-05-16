@@ -2,13 +2,18 @@ import Logger from './common/logger';
 const logger = Logger.ns('EventQueue');
 
 import type DatabaseClient from './_database';
-import { EBuiltinDatabaseObjectNames, EInternalOperation, TQueueEvents, TQueueNotification, TQueueRow, TQueueRowId } from './common/types';
+import { EBuiltinDatabaseObjectNames, EInternalOperation, ETriggerOperation, TQueueNotification, TQueueRow, TQueueRowId, TTableName } from './common/types';
 
 import { PoolClient } from 'pg';
 import EventEmitter from './common/event-emitter';
 import { isInternalOperation, isTriggerOperation } from './common/utils';
 
-export default class EventQueue extends EventEmitter<TQueueEvents> {
+export type TEventQueueEvents = Record<
+  `internal:${EInternalOperation}` | `queued:${TTableName}:${ETriggerOperation}`,
+  TQueueRowId
+>;
+
+export default class EventQueue extends EventEmitter<TEventQueueEvents> {
   private dbClient: DatabaseClient;
   private notificationListenerClient?: PoolClient;
   private reconciliationIntervalMs: number;
@@ -22,6 +27,8 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
   }
 
   async connect() {
+    logger.debug('Connecting...');
+
     await this.startListening()
       .then(() => logger.info('Started listening'))
       .catch(error => logger.error('Failed to start listening', error));
@@ -33,10 +40,22 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
     );
   }
 
-  async disconnect() {
+  async disconnect(gracePeriod = 5_000) {
+    logger.debug('Disconnecting...');
+
     clearInterval(this.reconciliationTimer);
 
-    await this.stopListening();
+    this.stopListening();
+
+    await new Promise(
+      resolve => setTimeout(resolve, gracePeriod)
+    );
+  }
+
+  async reconnect(cooldown = 5_000) {
+    await this.disconnect(cooldown);
+
+    await this.connect();
   }
 
   async initialize() {
@@ -256,7 +275,7 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
         isInternal: tableName === internalPseudoTableName,
       };
 
-      // this.emitNotification(notification);
+      this.emitNotification(notification);
     });
 
     const notificationChannelName = this.dbClient.prefixName(
@@ -279,8 +298,10 @@ export default class EventQueue extends EventEmitter<TQueueEvents> {
     }
   }
 
-  private async stopListening() {
-    await this.notificationListenerClient?.release(true);
+  private stopListening() {
+    this.notificationListenerClient!.release(true);
+
+    this.notificationListenerClient = undefined;
   }
 
   private async reconcileQueuedEvents() {

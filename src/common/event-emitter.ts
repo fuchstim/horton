@@ -1,6 +1,6 @@
 import BaseEventEmitter from 'events';
 
-type TEventTypeMap = Record<string, string | number | object>;
+type TEventTypeMap = Record<string, string | number | object | null>;
 type TEventName<T extends TEventTypeMap> = string & keyof T;
 type TEventListener<T> = (payload: T) => void | Promise<void>;
 

@@ -31,11 +31,6 @@ export type TQueueNotification = {
   isInternal: boolean,
 };
 
-export type TQueueEvents = Record<
-  `internal:${EInternalOperation}` | `queued:${TTableName}:${ETriggerOperation}`,
-  TQueueRowId
->;
-
 export type TQueueRow = {
   id: TQueueRowId,
   tableName: TTableName,

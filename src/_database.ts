@@ -22,7 +22,8 @@ export default class DatabaseClient {
   async connect() {
     logger.debug('Connecting...');
 
-    await this.pool.connect();
+    await this.pool.connect()
+      .then(client => client.release());
 
     logger.debug('Connected.');
   }
