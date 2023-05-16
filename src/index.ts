@@ -1,4 +1,4 @@
-import { TTableName, TOperation, TDatabaseConnectionOptions, TQueueNotification, TTableListener, TRIGGER_OPERATIONS } from './common/types';
+import { TTableName, TOperation, TDatabaseConnectionOptions, TQueueNotification, TTableListener, TTableListenerOptions } from './common/types';
 
 import DatabaseClient from './_database';
 import EventQueue from './_event-queue';
@@ -6,7 +6,7 @@ import { TypedEventEmitter } from './common/event-emitter';
 
 export type THortonOptions = {
   connectionOptions: TDatabaseConnectionOptions,
-  tableListeners: Record<TTableName, boolean | TOperation[]>,
+  tableListeners: Record<TTableName, TTableListenerOptions>,
   reconciliationFrequency?: number
 };
 
@@ -67,17 +67,15 @@ class Horton extends TypedEventEmitter<THortonEvents> {
           return { tableName, operations: config, };
         }
 
-        const operations = config ? TRIGGER_OPERATIONS : [];
-
-        return { tableName, operations: operations as TOperation[], };
+        return { tableName, ...config, };
       })
       .filter(({ operations, }) => operations.length);
   }
 
   private async syncListeners() {
     await this.dbClient.transaction(async client => {
-      for (const { tableName, operations, } of this.tableListeners) {
-        await this.dbClient.createListenerTrigger(client, tableName, operations);
+      for (const listenerConfig of this.tableListeners) {
+        await this.dbClient.createListenerTrigger(client, listenerConfig);
       }
     });
   }

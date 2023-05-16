@@ -81,7 +81,12 @@ export default class DatabaseClient {
     return escaper?.apply(escaper, [ prefixedName, ]) ?? prefixedName;
   }
 
-  async createListenerTrigger(client: PoolClient, tableName: string, operations: TOperation[], keepColumns?: string[]) {
+  async createListenerTrigger(
+    client: PoolClient,
+    config: TTableTrigger
+  ) {
+    const { tableName, operations, recordColumns, } = config;
+
     logger.info(`Creating listener on table ${tableName} (${operations.join(', ')})`);
 
     const escapedTableName = client.escapeIdentifier(tableName);
@@ -98,13 +103,13 @@ export default class DatabaseClient {
     }
 
     const createJsonFormatter = (source: 'OLD' | 'NEW') => {
-      if (!keepColumns) {
+      if (!recordColumns) {
         return /* sql */`CASE WHEN ${source} IS NULL THEN NULL ELSE to_jsonb(${source}) END`;
       }
 
-      if (keepColumns.length === 0) { return /* sql */'NULL'; }
+      if (recordColumns.length === 0) { return /* sql */'NULL'; }
 
-      const buildObjectParams = keepColumns
+      const buildObjectParams = recordColumns
         .map(column => `${client.escapeLiteral(column)}, ${source}.${client.escapeIdentifier(column)}`)
         .join(', ');
 

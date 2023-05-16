@@ -6,7 +6,7 @@ async function run() {
       connectionString: 'postgres://postgres:postgrespw@127.0.0.1:5432',
     },
     tableListeners: {
-      test_table: true,
+      test_table: [ 'INSERT', 'UPDATE', 'DELETE', ],
     },
   });
 

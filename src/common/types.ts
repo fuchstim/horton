@@ -11,6 +11,7 @@ export enum EBuiltinDatabaseObjectNames {
 }
 
 export type TTableName = string;
+export type TColumnName = string;
 
 export type TQueueRowId = number;
 
@@ -37,7 +38,17 @@ export type TDatabaseConnectionOptions = PoolConfig & { prefix?: string };
 
 export type TTableTrigger = {
   tableName: TTableName,
-  operations: TOperation[]
+  operations: TOperation[],
+  recordColumns?: TColumnName[]
 };
 
 export type TTableListener = TTableTrigger;
+
+export type TSimpleTableListenerOptions = TOperation[];
+
+export type TAdvancedTableListenerOptions = {
+  operations: TOperation[]
+  recordColumns: TColumnName[]
+};
+
+export type TTableListenerOptions = TSimpleTableListenerOptions | TAdvancedTableListenerOptions;
