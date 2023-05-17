@@ -30,6 +30,7 @@ Please refer to the installation and usage guides in the [project wiki](https://
   - [ ] Dequeuing priority
 - [ ] Improve logging, add logging config options
 - [x] Periodic reconciliation
-- [ ] Heartbeat checker
+- [x] Liveness checker
 - [ ] Retry on error
 - [ ] Support other RDBMS
+- [ ] Cleanup types
