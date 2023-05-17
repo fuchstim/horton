@@ -3,7 +3,7 @@ const logger = Logger.ns('LivenessChecker');
 
 import type EventQueue from './_event-queue';
 
-import { EInternalOperation, TInternalQueueRow } from './common/types';
+import { EInternalOperation, TInternalQueueRow, TLivenessCheckerOptions } from './common/types';
 import { TypedEventEmitter } from './common/event-emitter';
 
 type TLivenessCheckerEvents = {
@@ -13,16 +13,19 @@ type TLivenessCheckerEvents = {
 };
 
 export default class LivenessChecker extends TypedEventEmitter<TLivenessCheckerEvents> {
-  private eventQueue: EventQueue;
-  private intervalMs: number;
+  private readonly eventQueue: EventQueue;
+  private readonly pulseIntervalMs: number;
+  private readonly maxMissedPulses: number;
+
   private intervalTimer?: NodeJS.Timer;
   private lastHeartbeat: Date = new Date();
 
-  constructor(eventQueue: EventQueue, intervalMs: number) {
+  constructor(eventQueue: EventQueue, options?: TLivenessCheckerOptions) {
     super();
 
     this.eventQueue = eventQueue;
-    this.intervalMs = intervalMs;
+    this.pulseIntervalMs = options?.pulseIntervalMs ?? 10_000;
+    this.maxMissedPulses = options?.maxMissedPulses ?? 3;
 
     this.eventQueue.on(
       `internal:${EInternalOperation.LIVENESS_PULSE}`,
@@ -31,13 +34,13 @@ export default class LivenessChecker extends TypedEventEmitter<TLivenessCheckerE
   }
 
   start() {
-    logger.debug(`Starting liveness checker every ${this.intervalMs / 1_000}s`);
+    logger.debug(`Starting liveness checker every ${this.pulseIntervalMs / 1_000}s`);
 
     this.lastHeartbeat = new Date();
 
     this.intervalTimer = setInterval(
       () => this.pulse(),
-      this.intervalMs
+      this.pulseIntervalMs
     );
   }
 
@@ -52,7 +55,7 @@ export default class LivenessChecker extends TypedEventEmitter<TLivenessCheckerE
 
     await this.eventQueue.queueInternal(EInternalOperation.LIVENESS_PULSE);
 
-    const isHealthy = (Date.now() - this.intervalMs) < this.lastHeartbeat.getTime();
+    const isHealthy = this.lastHeartbeat.getTime() > Date.now() - (this.pulseIntervalMs * this.maxMissedPulses);
     const status = isHealthy ? 'healthy' : 'unhealthy';
 
     logger.debug(`Status: ${status}`);

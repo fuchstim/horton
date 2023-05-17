@@ -1,4 +1,4 @@
-import { TTableName, ETriggerOperation, TDatabaseConnectionOptions, TTableListener, TTableListenerOptions, TQueueRowId, TTriggerQueueRow } from './common/types';
+import { TTableName, ETriggerOperation, TDatabaseConnectionOptions, TTableListener, TTableListenerOptions, TQueueRowId, TTriggerQueueRow, TEventQueueOptions, TLivenessCheckerOptions } from './common/types';
 
 import DatabaseClient from './_database';
 import EventQueue from './_event-queue';
@@ -8,7 +8,8 @@ import LivenessChecker from './_liveness-checker';
 export type THortonOptions = {
   connectionOptions: TDatabaseConnectionOptions,
   tableListeners: Record<TTableName, TTableListenerOptions>,
-  reconciliationFrequency?: number
+  eventQueueOptions?: TEventQueueOptions,
+  livenessCheckerOptions?: TLivenessCheckerOptions,
 };
 
 export type THortonEvents = Record<`${keyof THortonOptions['tableListeners']}:${ETriggerOperation | '*'}`, object>;
@@ -26,9 +27,8 @@ class Horton extends TypedEventEmitter<THortonEvents> {
 
     this.dbClient = new DatabaseClient(options.connectionOptions);
 
-    const reconciliationFrequency = options.reconciliationFrequency ?? 10_000;
-    this.eventQueue = new EventQueue(this.dbClient, reconciliationFrequency);
-    this.livenessChecker = new LivenessChecker(this.eventQueue, reconciliationFrequency + 5_000);
+    this.eventQueue = new EventQueue(this.dbClient, options.eventQueueOptions);
+    this.livenessChecker = new LivenessChecker(this.eventQueue, options.livenessCheckerOptions);
 
     this.livenessChecker.on(
       'unhealthy',

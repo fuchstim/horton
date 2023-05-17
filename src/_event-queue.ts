@@ -2,7 +2,7 @@ import Logger from './common/logger';
 const logger = Logger.ns('EventQueue');
 
 import type DatabaseClient from './_database';
-import { EBuiltinDatabaseObjectNames, EInternalOperation, ETriggerOperation, TQueueNotification, TQueueRow, TQueueRowId, TTableName } from './common/types';
+import { EBuiltinDatabaseObjectNames, EInternalOperation, ETriggerOperation, TEventQueueOptions, TQueueNotification, TQueueRow, TQueueRowId, TTableName } from './common/types';
 
 import { PoolClient } from 'pg';
 import EventEmitter from './common/event-emitter';
@@ -14,16 +14,17 @@ export type TEventQueueEvents = Record<
 >;
 
 export default class EventQueue extends EventEmitter<TEventQueueEvents> {
-  private dbClient: DatabaseClient;
+  private readonly dbClient: DatabaseClient;
+  private readonly reconciliationIntervalMs: number;
+
   private notificationListenerClient?: PoolClient;
-  private reconciliationIntervalMs: number;
   private reconciliationTimer?: NodeJS.Timer;
 
-  constructor(dbClient: DatabaseClient, reconciliationIntervalMs: number) {
+  constructor(dbClient: DatabaseClient, options?: TEventQueueOptions) {
     super();
 
     this.dbClient = dbClient;
-    this.reconciliationIntervalMs = reconciliationIntervalMs;
+    this.reconciliationIntervalMs = options?.reconciliationFrequencyMs ?? 15_000;
   }
 
   async connect() {

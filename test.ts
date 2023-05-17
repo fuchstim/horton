@@ -8,7 +8,12 @@ async function run() {
     tableListeners: {
       test_table: [ 'INSERT', 'UPDATE', 'DELETE', ],
     },
-    reconciliationFrequency: 5_000,
+    eventQueueOptions: {
+      reconciliationFrequencyMs: 5_000,
+    },
+    livenessCheckerOptions: {
+      pulseIntervalMs: 1_000,
+    },
   });
 
   await h.connect();

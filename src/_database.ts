@@ -7,8 +7,8 @@ import { Pool, PoolClient } from 'pg';
 import { isTriggerOperation, validatePostgresString } from './common/utils';
 
 export default class DatabaseClient {
-  private pool: Pool;
-  private prefix: string;
+  private readonly pool: Pool;
+  private readonly prefix: string;
 
   constructor(options: TDatabaseConnectionOptions) {
     this.pool = new Pool(options);

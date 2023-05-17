@@ -60,3 +60,12 @@ export type TAdvancedTableListenerOptions = {
   recordColumns: TColumnName[]
 };
 export type TTableListenerOptions = TSimpleTableListenerOptions | TAdvancedTableListenerOptions;
+
+export type TEventQueueOptions = {
+  reconciliationFrequencyMs?: number
+};
+
+export type TLivenessCheckerOptions = {
+  pulseIntervalMs?: number,
+  maxMissedPulses?: number
+};
