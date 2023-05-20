@@ -12,7 +12,10 @@ export type THortonOptions = {
   livenessCheckerOptions?: TLivenessCheckerOptions,
 };
 
-export type THortonEvents = Record<`${keyof THortonOptions['tableListeners']}:${ETriggerOperation | '*'}`, object> & TLivenessCheckerEvents;
+export type THortonEvents = Record<
+  `${keyof THortonOptions['tableListeners']}:${ETriggerOperation | '*'}`,
+  Omit<TTriggerQueueRow, 'id' | 'tableName' | 'queuedAt'>
+> & TLivenessCheckerEvents;
 
 class Horton extends TypedEventEmitter<THortonEvents> {
   private dbClient: DatabaseClient;
@@ -121,10 +124,26 @@ class Horton extends TypedEventEmitter<THortonEvents> {
   private async handleQueueNotification(rowId: TQueueRowId) {
     await this.eventQueue.dequeue<TTriggerQueueRow, unknown>(
       rowId,
-      row => Promise.all([
-        this.emitSync(`${row.tableName}:${row.operation}`, row),
-        this.emitSync(`${row.tableName}:*`, row),
-      ])
+      row => {
+        const event = {
+          operation: row.operation,
+          previousRecord: row.previousRecord,
+          currentRecord: row.currentRecord,
+        };
+
+        Promise.all([
+          this.emitSync(
+            `${row.tableName}:${row.operation}`,
+            event
+          ),
+
+          this.emitSync(
+            `${row.tableName}:*`,
+            event
+          ),
+
+        ]);
+      }
     );
   }
 }
