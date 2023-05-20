@@ -51,6 +51,11 @@ export type TTableTrigger = {
 
 export type TTableListener = TTableTrigger;
 
+export type TLivenessCheckerStatus = 'healthy' | 'unhealthy' | 'dead';
+export type TLivenessCheckerEvents = Record<TLivenessCheckerStatus, { lastHeartbeatAt: Date }> & {
+  heartbeat: { pulsedAt: Date, pulseLag: number }
+};
+
 // Public types
 export type TDatabaseConnectionOptions = PoolConfig & { prefix?: string };
 

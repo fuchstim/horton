@@ -1,4 +1,4 @@
-import { TTableName, ETriggerOperation, TDatabaseConnectionOptions, TTableListener, TTableListenerOptions, TQueueRowId, TTriggerQueueRow, TEventQueueOptions, TLivenessCheckerOptions } from './common/types';
+import { TTableName, ETriggerOperation, TDatabaseConnectionOptions, TTableListener, TTableListenerOptions, TQueueRowId, TTriggerQueueRow, TEventQueueOptions, TLivenessCheckerOptions, TLivenessCheckerEvents } from './common/types';
 
 import DatabaseClient from './_database';
 import EventQueue from './_event-queue';
@@ -12,7 +12,7 @@ export type THortonOptions = {
   livenessCheckerOptions?: TLivenessCheckerOptions,
 };
 
-export type THortonEvents = Record<`${keyof THortonOptions['tableListeners']}:${ETriggerOperation | '*'}`, object>;
+export type THortonEvents = Record<`${keyof THortonOptions['tableListeners']}:${ETriggerOperation | '*'}`, object> & TLivenessCheckerEvents;
 
 class Horton extends TypedEventEmitter<THortonEvents> {
   private dbClient: DatabaseClient;
@@ -31,8 +31,26 @@ class Horton extends TypedEventEmitter<THortonEvents> {
     this.livenessChecker = new LivenessChecker(this.eventQueue, options.livenessCheckerOptions);
 
     this.livenessChecker.on(
+      'healthy',
+      payload => { this.emit('healthy', payload); }
+    );
+
+    this.livenessChecker.on(
       'unhealthy',
-      () => this.eventQueue.reconnect()
+      async payload => {
+        this.emit('unhealthy', payload);
+
+        await this.eventQueue.reconnect();
+      }
+    );
+
+    this.livenessChecker.on(
+      'dead',
+      async payload => {
+        this.emit('dead', payload);
+
+        await this.disconnect();
+      }
     );
   }
 

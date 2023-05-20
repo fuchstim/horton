@@ -4,16 +4,6 @@ type TEventTypeMap = Record<string, string | number | object | null>;
 type TEventName<T extends TEventTypeMap> = string & keyof T;
 type TEventListener<T> = (payload: T) => void | Promise<void>;
 
-type TProxyFilterFn<T extends TEventTypeMap> = (
-  eventName: TEventName<T>,
-  payload: T[TEventName<T>]
-) => boolean | Promise<boolean>;
-
-type TProxy<T extends TEventTypeMap> = {
-  target: TypedEventEmitter<T>,
-  filterFn?: TProxyFilterFn<T>
-};
-
 type TBuiltinEvents = {
   error: Error,
   newListener: string,
@@ -21,8 +11,6 @@ type TBuiltinEvents = {
 };
 
 export class TypedEventEmitter<T extends TEventTypeMap> extends BaseEventEmitter {
-  private proxies: TProxy<T>[] = [];
-
   constructor(options?: { captureRejections?: boolean }) {
     super({ ...options, captureRejections: true, });
   }
@@ -36,10 +24,6 @@ export class TypedEventEmitter<T extends TEventTypeMap> extends BaseEventEmitter
   }
 
   override emit<N extends TEventName<T>>(eventName: N, payload: T[N]) {
-    this.proxies
-      .filter(p => p.filterFn?.apply(p, [ eventName, payload, ]) ?? true)
-      .forEach(p => p.target.emit(eventName, payload));
-
     return super.emit(eventName, payload);
   }
 
@@ -53,14 +37,6 @@ export class TypedEventEmitter<T extends TEventTypeMap> extends BaseEventEmitter
           .catch(() => null)
       )
     );
-  }
-
-  registerProxy(target: TypedEventEmitter<T>, filterFn?: TProxyFilterFn<T>) {
-    this.proxies.push({ target, filterFn, });
-  }
-
-  deregisterProxy(target: TypedEventEmitter<T>) {
-    this.proxies = this.proxies.filter(p => p.target !== target);
   }
 
   override addListener<
