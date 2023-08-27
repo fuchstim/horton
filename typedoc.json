@@ -8,5 +8,5 @@
     "typedoc-plugin-rename-defaults",
     "typedoc-plugin-missing-exports"
   ],
-  "titleLink": "https://github.com/fuchstim/mint-client"
+  "titleLink": "https://github.com/fuchstim/horton"
 }
