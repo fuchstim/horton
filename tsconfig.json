@@ -23,5 +23,6 @@
     "noImplicitOverride": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "declaration": true
   }
 }

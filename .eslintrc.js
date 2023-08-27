@@ -2,10 +2,11 @@ module.exports = {
   root: true,
   parser: '@typescript-eslint/parser',
   ignorePatterns: [ '**/proto/**', ],
-  plugins: [ '@typescript-eslint', ],
+  plugins: [ '@typescript-eslint', 'eslint-plugin-tsdoc', ],
   extends: [
     'eslint:recommended',
     'plugin:@typescript-eslint/eslint-recommended',
+    'plugin:@typescript-eslint/recommended',
     'plugin:@typescript-eslint/recommended',
   ],
   env: {
@@ -104,5 +105,6 @@ module.exports = {
     '@typescript-eslint/semi': [ 'error', 'always', ],
     '@typescript-eslint/no-non-null-assertion': 'off',
     'quote-props': [ 'error', 'as-needed', ],
+    'tsdoc/syntax': 'warn',
   },
 };
