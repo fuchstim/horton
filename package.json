@@ -1,12 +1,22 @@
 {
-  "name": "horton",
+  "name": "@ftim/horton",
   "version": "1.0.0",
-  "description": "",
   "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "clean": "rm -rf ./dist",
+    "build": "tsc -p ./tsconfig.json; typedoc",
+    "rebuild": "npm run clean && npm run build",
+    "release": "npm publish --otp=$(op item get 'NPM Registry' --otp)",
+    "prepublishOnly": "npm install && npm run rebuild"
   },
-  "author": "",
+  "keywords": [],
+  "author": "Tim Fuchs <mail@ftim.dev> (https://github.com/fuchstim)",
+  "homepage": "https://github.com/fuchstim/horton",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fuchstim/horton.git"
+  },
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^20.1.1",
