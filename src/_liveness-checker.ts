@@ -4,7 +4,8 @@ const logger = Logger.ns('LivenessChecker');
 import type EventQueue from './_event-queue';
 
 import { EInternalOperation, TInternalQueueRow, TLivenessCheckerEvents, TLivenessCheckerOptions, TLivenessCheckerStatus } from './common/types';
-import { TypedEventEmitter } from './common/event-emitter';
+import { TypedEventEmitter } from './common/typed-event-emitter';
+
 
 export default class LivenessChecker extends TypedEventEmitter<TLivenessCheckerEvents> {
   private readonly eventQueue: EventQueue;

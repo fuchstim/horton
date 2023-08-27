@@ -1,19 +1,20 @@
+import { PoolClient } from 'pg';
+
 import Logger from './common/logger';
 const logger = Logger.ns('EventQueue');
 
 import type DatabaseClient from './_database';
 import { EBuiltinDatabaseObjectNames, EInternalOperation, ETriggerOperation, TEventQueueOptions, TQueueNotification, TQueueRow, TQueueRowId, TTableName } from './common/types';
 
-import { PoolClient } from 'pg';
-import EventEmitter from './common/event-emitter';
 import { isInternalOperation, isTriggerOperation } from './common/utils';
+import { TypedEventEmitter } from "./common/typed-event-emitter";
 
 export type TEventQueueEvents = Record<
   `internal:${EInternalOperation}` | `queued:${TTableName}:${ETriggerOperation}`,
   TQueueRowId
 >;
 
-export default class EventQueue extends EventEmitter<TEventQueueEvents> {
+export default class EventQueue extends TypedEventEmitter<TEventQueueEvents> {
   private readonly dbClient: DatabaseClient;
   private readonly reconciliationIntervalMs: number;
 

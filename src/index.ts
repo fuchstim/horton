@@ -2,8 +2,8 @@ import { TTableName, ETriggerOperation, TDatabaseConnectionOptions, TTableListen
 
 import DatabaseClient from './_database';
 import EventQueue from './_event-queue';
-import { TypedEventEmitter } from './common/event-emitter';
 import LivenessChecker from './_liveness-checker';
+import { TypedEventEmitter } from './common/typed-event-emitter';
 
 export type THortonOptions = {
   connectionOptions: TDatabaseConnectionOptions,
