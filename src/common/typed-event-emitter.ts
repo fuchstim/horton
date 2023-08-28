@@ -1,5 +1,5 @@
-import EventEmitter from "events"
-import TypedEmitter, {EventMap} from "typed-emitter"
+import EventEmitter from 'events';
+import TypedEmitter, { EventMap } from 'typed-emitter';
 
 type TEventTypeMap = Record<string, string | number | object | null>;
 type TEventName<T extends TEventTypeMap> = string & keyof T;
@@ -11,7 +11,8 @@ type TEventHandlers<E extends TEventTypeMap> = {
 
 type EventEmitterOptions = { captureRejections?: boolean };
 
-export class TypedEventEmitter<T extends TEventTypeMap> extends (EventEmitter as { new<T extends EventMap>(options?: EventEmitterOptions): TypedEmitter<T> })<TEventHandlers<T>> {
+export class TypedEventEmitter<T extends TEventTypeMap>
+extends (EventEmitter as { new<T extends EventMap>(options?: EventEmitterOptions): TypedEmitter<T> })<TEventHandlers<T>> {
   constructor(options: EventEmitterOptions = {}) {
     super(options);
   }

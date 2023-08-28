@@ -7,7 +7,7 @@ import type DatabaseClient from './_database';
 import { EBuiltinDatabaseObjectNames, EInternalOperation, ETriggerOperation, TEventQueueOptions, TQueueNotification, TQueueRow, TQueueRowId, TTableName } from './common/types';
 
 import { isInternalOperation, isTriggerOperation } from './common/utils';
-import { TypedEventEmitter } from "./common/typed-event-emitter";
+import { TypedEventEmitter } from './common/typed-event-emitter';
 
 export type TEventQueueEvents = Record<
   `internal:${EInternalOperation}` | `queued:${TTableName}:${ETriggerOperation}`,
@@ -217,22 +217,12 @@ export default class EventQueue extends TypedEventEmitter<TEventQueueEvents> {
   }
 
   private async createTrigger(client: PoolClient) {
-    const triggerName = this.dbClient.prefixName(
-      EBuiltinDatabaseObjectNames.EVENT_QUEUE_TRIGGER,
-      client.escapeIdentifier
-    );
-    const triggerFunctionName = this.dbClient.prefixName(
-      EBuiltinDatabaseObjectNames.EVENT_QUEUE_TRIGGER_FUNCTION,
-      client.escapeIdentifier
-    );
-    const notificationChannelName = this.dbClient.prefixName(
-      EBuiltinDatabaseObjectNames.EVENT_QUEUE_NOTIFICATION_CHANNEL,
-      client.escapeLiteral
-    );
-    const queueTableName = this.dbClient.prefixName(
-      EBuiltinDatabaseObjectNames.EVENT_QUEUE_TABLE,
-      client.escapeIdentifier
-    );
+    const [ triggerName, triggerFunctionName, notificationChannelName, queueTableName, ] = this.dbClient.prefixNames([
+      [ EBuiltinDatabaseObjectNames.EVENT_QUEUE_TRIGGER, client.escapeIdentifier, ],
+      [ EBuiltinDatabaseObjectNames.EVENT_QUEUE_TRIGGER_FUNCTION, client.escapeIdentifier, ],
+      [ EBuiltinDatabaseObjectNames.EVENT_QUEUE_NOTIFICATION_CHANNEL, client.escapeLiteral, ],
+      [ EBuiltinDatabaseObjectNames.EVENT_QUEUE_TABLE, client.escapeIdentifier, ],
+    ]);
 
     await client.query(/* sql */ `
       CREATE OR REPLACE FUNCTION ${triggerFunctionName}() RETURNS trigger AS $$
@@ -310,15 +300,10 @@ export default class EventQueue extends TypedEventEmitter<TEventQueueEvents> {
     logger.debug('Beginning reconciliation...');
 
     await this.dbClient.transaction(async client => {
-      const pseudoTableName = this.dbClient.prefixName(
-        EBuiltinDatabaseObjectNames.INTERNAL_PSEUDO_TABLE,
-        client.escapeLiteral
-      );
-
-      const queueTableName = this.dbClient.prefixName(
-        EBuiltinDatabaseObjectNames.EVENT_QUEUE_TABLE,
-        client.escapeIdentifier
-      );
+      const [ pseudoTableName, queueTableName, ] = this.dbClient.prefixNames([
+        [ EBuiltinDatabaseObjectNames.INTERNAL_PSEUDO_TABLE, client.escapeLiteral, ],
+        [ EBuiltinDatabaseObjectNames.EVENT_QUEUE_TABLE, client.escapeIdentifier, ],
+      ]);
 
       const data = await client.query<TQueueNotification>(/* sql */ `
         SELECT 

@@ -6,6 +6,8 @@ import { EBuiltinDatabaseObjectNames, TDatabaseConnectionOptions, ETriggerOperat
 import { Pool, PoolClient } from 'pg';
 import { isTriggerOperation, validatePostgresString } from './common/utils';
 
+type TEscaper = (str: string) => string;
+
 export default class DatabaseClient {
   private readonly pool: Pool;
   private readonly prefix: string;
@@ -72,7 +74,7 @@ export default class DatabaseClient {
     }
   }
 
-  prefixName(name: string, escaper?: (str: string) => string) {
+  prefixName(name: string, escaper?: TEscaper) {
     const prefixedName = `${this.prefix}__${name}`;
 
     if (!validatePostgresString(prefixedName)) {
@@ -80,6 +82,14 @@ export default class DatabaseClient {
     }
 
     return escaper?.apply(escaper, [ prefixedName, ]) ?? prefixedName;
+  }
+
+  prefixNames(names: (string | [string, TEscaper])[]) {
+    return names.map(name => (
+      typeof name === 'string'
+        ? this.prefixName(name)
+        : this.prefixName(name[0], name[1])
+    ));
   }
 
   async createListenerTrigger(
@@ -91,12 +101,11 @@ export default class DatabaseClient {
     logger.info(`Creating listener on table ${tableName} (${operations.join(', ')})`);
 
     const escapedTableName = client.escapeIdentifier(tableName);
-    const triggerName = this.prefixName(`listener_trigger_${tableName}`, client.escapeIdentifier);
-    const triggerFunctionName = this.prefixName(`listener_trigger_${tableName}_fn`, client.escapeIdentifier);
-    const queueTableName = this.prefixName(
-      EBuiltinDatabaseObjectNames.EVENT_QUEUE_TABLE,
-      client.escapeIdentifier
-    );
+    const [ triggerName, triggerFunctionName, queueTableName, ] = this.prefixNames([
+      [ `listener_trigger_${tableName}`, client.escapeIdentifier, ],
+      [ `listener_trigger_${tableName}_fn`, client.escapeIdentifier, ],
+      [ EBuiltinDatabaseObjectNames.EVENT_QUEUE_TABLE, client.escapeIdentifier, ],
+    ]);
 
     const formattedOperations = operations.join(' OR ');
     if (operations.some(o => !isTriggerOperation(o))) {
@@ -145,8 +154,10 @@ export default class DatabaseClient {
 
   async dropListenerTrigger(client: PoolClient, tableName: string) {
     const escapedTableName = client.escapeIdentifier(tableName);
-    const triggerName = this.prefixName(`listener_trigger_${tableName}`, client.escapeIdentifier);
-    const triggerFunctionName = this.prefixName(`listener_trigger_${tableName}_fn`, client.escapeIdentifier);
+    const [ triggerName, triggerFunctionName, ] = this.prefixNames([
+      [ `listener_trigger_${tableName}`, client.escapeIdentifier, ],
+      [ `listener_trigger_${tableName}_fn`, client.escapeIdentifier, ],
+    ]);
 
     await client.query(/* sql */ `
       DROP TRIGGER IF EXISTS ${triggerName}
